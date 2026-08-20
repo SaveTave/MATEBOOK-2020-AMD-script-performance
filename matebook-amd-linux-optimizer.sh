@@ -68,9 +68,9 @@ read -p "❓ Vuoi impostare una soglia di stop ricarica della batteria? (S/n): "
 ENABLE_THRESH=${ENABLE_THRESH:-s}
 
 if [[ "$ENABLE_THRESH" =~ ^[sSyY]$ ]]; then
-    read -p "-> Soglia minima di avvio carica [default: 35]: " BATT_MIN
+    read -p "-> Soglia minima di avvio carica [default: 40]: " BATT_MIN
     BATT_MIN=${BATT_MIN:-35}
-    read -p "-> Soglia massima di stop carica [default: 90]: " BATT_MAX
+    read -p "-> Soglia massima di stop carica [default: 80]: " BATT_MAX
     BATT_MAX=${BATT_MAX:-90}
 
     echo "⚙️  Configurazione soglia impostata su: $BATT_MIN% - $BATT_MAX%"
