@@ -49,6 +49,7 @@ RuntimeMaxUse=80M
 EOF
 
 systemctl restart systemd-journald || true
+journalctl --vacuum-size=250M || true
 
 echo "=== 4. GESTIONE MODEM LTE/5G ==="
 read -p "❓ Usi un modem cellulare SIM 4G/5G integrato o chiavette LTE? (s/N): " USE_MODEM
@@ -77,7 +78,7 @@ if [[ "$ENABLE_THRESH" =~ ^[sSyY]$ ]]; then
     tee /etc/systemd/system/huawei-battery-threshold.service << EOF
 [Unit]
 Description=Set Huawei Battery Charge Thresholds
-After=multi-user.target
+After=basic.target
 
 [Service]
 Type=oneshot
@@ -128,16 +129,15 @@ apply_profile() {
     fi
 }
 
-# 1. Attesa post-boot per sincronizzazione con GNOME / powerprofilesctl
+# Attesa post-boot per sincronizzazione con GNOME
 (
     sleep 4
     apply_profile
 ) &
 
-# 2. Applicazione iniziale
 apply_profile
 
-# 3. Ascolto continuo segnali D-Bus
+# Ascolto continuo D-Bus
 gdbus monitor --system --dest net.hadess.PowerProfiles --object-path /net/hadess/PowerProfiles | while read -r line; do
     if echo "$line" | grep -qE "ActiveProfile|PropertiesChanged"; then
         sleep 0.1
