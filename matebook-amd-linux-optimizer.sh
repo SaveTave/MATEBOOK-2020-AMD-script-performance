@@ -70,9 +70,9 @@ ENABLE_THRESH=${ENABLE_THRESH:-s}
 
 if [[ "$ENABLE_THRESH" =~ ^[sSyY]$ ]]; then
     read -p "-> Soglia minima di avvio carica [default: 35]: " BATT_MIN
-    BATT_MIN=${BATT_MIN:-40}
+    BATT_MIN=${BATT_MIN:-35}
     read -p "-> Soglia massima di stop carica [default: 90]: " BATT_MAX
-    BATT_MAX=${BATT_MAX:-80}
+    BATT_MAX=${BATT_MAX:-90}
 
     echo "⚙️  Configurazione soglia impostata su: $BATT_MIN% - $BATT_MAX%"
     
@@ -130,10 +130,31 @@ apply_profile() {
     fi
 }
 
-# Applica all'avvio
-apply_profile
+handle_power_source() {
+    # Rileva se il cavo AC è collegato (1) o staccato (0)
+    AC_ONLINE=$(cat /sys/class/power_supply/AC*/online 2>/dev/null || cat /sys/class/power_supply/ADP*/online 2>/dev/null || echo 0)
+    
+    if [ "$AC_ONLINE" -eq 0 ]; then
+        # Cavo staccato -> Attiva Risparmio Energia
+        powerprofilesctl set power-saver 2>/dev/null || true
+    else
+        # Cavo collegato -> Attiva Bilanciato
+        powerprofilesctl set balanced 2>/dev/null || true
+    fi
+    apply_profile
+}
 
-# Rimani in ascolto dei cambi di profilo su D-Bus
+# Controllo iniziale all'avvio
+handle_power_source
+
+# 1. Ascolto eventi batteria/alimentatore (UPower)
+gdbus monitor --system --dest org.freedesktop.UPower --object-path /org/freedesktop/UPower | while read -r line; do
+    if echo "$line" | grep -q "PropertiesChanged"; then
+        handle_power_source
+    fi
+done &
+
+# 2. Ascolto cambio manuale profilo (PowerProfiles)
 gdbus monitor --system --dest net.hadess.PowerProfiles --object-path /net/hadess/PowerProfiles | while read -r line; do
     if echo "$line" | grep -q "ActiveProfile"; then
         apply_profile
