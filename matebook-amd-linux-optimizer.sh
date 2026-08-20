@@ -128,11 +128,19 @@ apply_profile() {
     fi
 }
 
+# 1. Attesa post-boot per sincronizzazione con GNOME / powerprofilesctl
+(
+    sleep 4
+    apply_profile
+) &
+
+# 2. Applicazione iniziale
 apply_profile
 
-# Ascolto eventi D-Bus per cambio profilo dal menu
+# 3. Ascolto continuo segnali D-Bus
 gdbus monitor --system --dest net.hadess.PowerProfiles --object-path /net/hadess/PowerProfiles | while read -r line; do
-    if echo "$line" | grep -q "ActiveProfile"; then
+    if echo "$line" | grep -qE "ActiveProfile|PropertiesChanged"; then
+        sleep 0.1
         apply_profile
     fi
 done
@@ -144,12 +152,13 @@ echo "=== 8. CREAZIONE ED ATTIVAZIONE SERVIZIO AUTO-BOOST ==="
 tee /etc/systemd/system/auto-boost.service << 'EOF'
 [Unit]
 Description=Auto CPU Boost and Frequency Manager for PowerProfiles
-After=power-profiles-daemon.service
+After=dbus.service
+Wants=dbus.service
 
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/auto-boost.sh
-Restart=on-failure
+Restart=always
 RestartSec=3
 
 [Install]
