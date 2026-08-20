@@ -6,9 +6,8 @@ echo "   🚀 CONFIGURAZIONE E OTTIMIZZAZIONE HUAWEI MATEBOOK 2020 (LINUX)"
 echo "	 - RYZEN 7 4800H - 16GB RAM - 500 GB SSD - FEDORA 44 NOBARA GNOME 50 "
 echo "=========================================================================="
 
-# Controllo privilegi di root/sudo
 if [ "$EUID" -ne 0 ]; then
-    echo "⚠️  Esegui questo script con sudo: sudo ./setup-matebook.sh"
+    echo "⚠️  Esegui questo script con sudo: sudo ./setup.sh"
     exit 1
 fi
 
@@ -41,7 +40,6 @@ EOF
 systemctl restart NetworkManager || true
 
 echo "=== 3. OTTIMIZZAZIONE SYSTEMD-JOURNALD (LOG SU DISCO) ==="
-# Impostato a 250MB: ampio per debug, previene scritture incontrollate su NVMe
 mkdir -p /etc/systemd/journald.conf.d
 tee /etc/systemd/journald.conf.d/00-journal-size.conf << 'EOF'
 [Journal]
@@ -113,14 +111,12 @@ apply_profile() {
     PROFILE=$(powerprofilesctl get 2>/dev/null || echo "balanced")
     
     if [ "$PROFILE" = "power-saver" ]; then
-        # Risparmio energetico: Boost OFF, Frequenza a 1.7GHz, Governor Powersave
         echo 0 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
         for cpu in /sys/devices/system/cpu/cpu*/cpufreq; do
             echo 1700000 > "$cpu/scaling_max_freq" 2>/dev/null || true
             echo powersave > "$cpu/scaling_governor" 2>/dev/null || true
         done
     else
-        # Bilanciato o Prestazioni: Boost ON, Frequenza Massima sbloccata, Governor Schedutil
         echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
         for cpu in /sys/devices/system/cpu/cpu*/cpufreq; do
             MAX_FREQ=$(cat "$cpu/cpuinfo_max_freq" 2>/dev/null || echo 2900000)
@@ -130,31 +126,38 @@ apply_profile() {
     fi
 }
 
-handle_power_source() {
-    # Rileva se il cavo AC è collegato (1) o staccato (0)
-    AC_ONLINE=$(cat /sys/class/power_supply/AC*/online 2>/dev/null || cat /sys/class/power_supply/ADP*/online 2>/dev/null || echo 0)
-    
-    if [ "$AC_ONLINE" -eq 0 ]; then
-        # Cavo staccato -> Attiva Risparmio Energia
-        powerprofilesctl set power-saver 2>/dev/null || true
+is_on_battery() {
+    if grep -q 1 /sys/class/power_supply/{AC*,ADP*,ucsi*}/online 2>/dev/null; then
+        echo 0
     else
-        # Cavo collegato -> Attiva Bilanciato
-        powerprofilesctl set balanced 2>/dev/null || true
+        echo 1
+    fi
+}
+
+PREV_STATE=$(is_on_battery)
+
+handle_power_transition() {
+    CURRENT_STATE=$(is_on_battery)
+    
+    if [ "$CURRENT_STATE" != "$PREV_STATE" ]; then
+        PREV_STATE="$CURRENT_STATE"
+        if [ "$CURRENT_STATE" -eq 1 ]; then
+            powerprofilesctl set power-saver 2>/dev/null || true
+        else
+            powerprofilesctl set balanced 2>/dev/null || true
+        fi
     fi
     apply_profile
 }
 
-# Controllo iniziale all'avvio
-handle_power_source
+apply_profile
 
-# 1. Ascolto eventi batteria/alimentatore (UPower)
 gdbus monitor --system --dest org.freedesktop.UPower --object-path /org/freedesktop/UPower | while read -r line; do
     if echo "$line" | grep -q "PropertiesChanged"; then
-        handle_power_source
+        handle_power_transition
     fi
 done &
 
-# 2. Ascolto cambio manuale profilo (PowerProfiles)
 gdbus monitor --system --dest net.hadess.PowerProfiles --object-path /net/hadess/PowerProfiles | while read -r line; do
     if echo "$line" | grep -q "ActiveProfile"; then
         apply_profile
