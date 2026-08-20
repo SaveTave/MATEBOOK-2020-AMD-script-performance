@@ -111,12 +111,14 @@ apply_profile() {
     PROFILE=$(powerprofilesctl get 2>/dev/null || echo "balanced")
     
     if [ "$PROFILE" = "power-saver" ]; then
+        # Risparmio energetico: Boost OFF, Frequenza a 1.7GHz, Governor Powersave
         echo 0 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
         for cpu in /sys/devices/system/cpu/cpu*/cpufreq; do
             echo 1700000 > "$cpu/scaling_max_freq" 2>/dev/null || true
             echo powersave > "$cpu/scaling_governor" 2>/dev/null || true
         done
     else
+        # Bilanciato o Prestazioni: Boost ON, Frequenza Massima sbloccata, Governor Schedutil
         echo 1 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
         for cpu in /sys/devices/system/cpu/cpu*/cpufreq; do
             MAX_FREQ=$(cat "$cpu/cpuinfo_max_freq" 2>/dev/null || echo 2900000)
@@ -126,38 +128,9 @@ apply_profile() {
     fi
 }
 
-is_on_battery() {
-    if grep -q 1 /sys/class/power_supply/{AC*,ADP*,ucsi*}/online 2>/dev/null; then
-        echo 0
-    else
-        echo 1
-    fi
-}
-
-PREV_STATE=$(is_on_battery)
-
-handle_power_transition() {
-    CURRENT_STATE=$(is_on_battery)
-    
-    if [ "$CURRENT_STATE" != "$PREV_STATE" ]; then
-        PREV_STATE="$CURRENT_STATE"
-        if [ "$CURRENT_STATE" -eq 1 ]; then
-            powerprofilesctl set power-saver 2>/dev/null || true
-        else
-            powerprofilesctl set balanced 2>/dev/null || true
-        fi
-    fi
-    apply_profile
-}
-
 apply_profile
 
-gdbus monitor --system --dest org.freedesktop.UPower --object-path /org/freedesktop/UPower | while read -r line; do
-    if echo "$line" | grep -q "PropertiesChanged"; then
-        handle_power_transition
-    fi
-done &
-
+# Ascolto eventi D-Bus per cambio profilo dal menu
 gdbus monitor --system --dest net.hadess.PowerProfiles --object-path /net/hadess/PowerProfiles | while read -r line; do
     if echo "$line" | grep -q "ActiveProfile"; then
         apply_profile
