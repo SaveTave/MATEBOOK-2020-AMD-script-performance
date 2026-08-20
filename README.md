@@ -22,6 +22,7 @@ Script di ottimizzazione energetica, termica e prestazionale per laptop **Huawei
 > * **OS:** Nobara Linux (Fedora-based)
 
 * **Adattamento frequenze:** I valori di default (1.7 GHz in risparmio energetico) sono tarati su Ryzen 7 4800H. Se utilizzi una CPU diversa (es. Ryzen 5 3500U, 4500U, 5500U), puoi verificare e modificare i limiti di frequenza direttamente all'interno dello script.
+*  **Prevenzione usura batteria** Impostata da 40% al 80%. Spesso di default alcune percentuali non vengono accettate quindi da verificare manualmente.
 * **Flessibilità:** Tutti i parametri sono personalizzabili in base alle proprie esigenze.
 
 ---
@@ -31,6 +32,7 @@ Script di ottimizzazione energetica, termica e prestazionale per laptop **Huawei
 | Ottimizzazione | Descrizione |
 | :--- | :--- |
 | **CPU Dynamic Governor & Boost** | Disattiva il Boost e fissa la frequenza a 1.7 GHz in modalità *Risparmio Energia*; sblocca frequenza massima e boost in modalità *Bilanciato/Prestazioni*. |
+| **Prevenzione usura batteria** | Livello di carica impostato da 40% a 80%. |
 | **D-Bus Event Listener** | Intercetta all'istante il cambio profilo dal menu di sistema senza cicli continui (zero consumo CPU in background). |
 | **C-States & NMI Watchdog** | Disabilita `nmi_watchdog` per permettere ai core Ryzen di entrare negli stati di sonno profondo (C2/C3/C6). |
 | **Memory & ZRAM Tuning** | Bilanciamento di `swappiness` (60) e scrittura ritardata della cache (`dirty_writeback_centisecs=800` a 8 secondi) per ridurre le scritture sull'SSD NVMe. |
