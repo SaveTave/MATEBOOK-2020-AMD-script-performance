@@ -69,9 +69,9 @@ ENABLE_THRESH=${ENABLE_THRESH:-s}
 
 if [[ "$ENABLE_THRESH" =~ ^[sSyY]$ ]]; then
     read -p "-> Soglia minima di avvio carica [default: 40]: " BATT_MIN
-    BATT_MIN=${BATT_MIN:-35}
+    BATT_MIN=${BATT_MIN:-40}
     read -p "-> Soglia massima di stop carica [default: 80]: " BATT_MAX
-    BATT_MAX=${BATT_MAX:-90}
+    BATT_MAX=${BATT_MAX:-80}
 
     echo "⚙️  Configurazione soglia impostata su: $BATT_MIN% - $BATT_MAX%"
     
@@ -82,7 +82,7 @@ After=basic.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'echo "$BATT_MIN $BATT_MAX" > /sys/devices/platform/huawei-wmi/charge_control_thresholds 2>/dev/null || true'
+ExecStart=/bin/sh -c 'echo "$BATT_MIN $BATT_MAX" > /sys/devices/platform/huawei-wmi/charge_control_thresholds'
 RemainAfterExit=yes
 
 [Install]
@@ -112,11 +112,11 @@ apply_profile() {
     PROFILE=$(powerprofilesctl get 2>/dev/null || echo "balanced")
     
     if [ "$PROFILE" = "power-saver" ]; then
-        # Risparmio energetico: Boost OFF, Frequenza a 1.7GHz, Governor Powersave
+        # Risparmio energetico: Boost OFF, Max 1.7GHz, Governor Schedutil (reattivo ed elimina i lag)
         echo 0 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
         for cpu in /sys/devices/system/cpu/cpu*/cpufreq; do
             echo 1700000 > "$cpu/scaling_max_freq" 2>/dev/null || true
-            echo powersave > "$cpu/scaling_governor" 2>/dev/null || true
+            echo schedutil > "$cpu/scaling_governor" 2>/dev/null || true
         done
     else
         # Bilanciato o Prestazioni: Boost ON, Frequenza Massima sbloccata, Governor Schedutil
@@ -129,7 +129,7 @@ apply_profile() {
     fi
 }
 
-# Attesa post-boot per sincronizzazione con GNOME
+# Attesa post-boot per sincronizzazione con GNOME e power-profiles-daemon
 (
     sleep 4
     apply_profile
@@ -137,7 +137,7 @@ apply_profile() {
 
 apply_profile
 
-# Ascolto continuo D-Bus
+# Ascolto continuo D-Bus per cambio profilo istantaneo
 gdbus monitor --system --dest net.hadess.PowerProfiles --object-path /net/hadess/PowerProfiles | while read -r line; do
     if echo "$line" | grep -qE "ActiveProfile|PropertiesChanged"; then
         sleep 0.1
@@ -175,10 +175,8 @@ cat << 'EOF'
 ================================================================================
 
 1. ESTENSIONE YOUTUBE (Evita la decodifica software AV1 via CPU):
-   - Installa l'estensione: "enhanced-h264ify"
-   - Clicca sull'icona dell'estensione e SPUNTA:
-     [✔] Block AV1
-     [ ] Block VP9 (lascialo non bloccato per abilitare 1440p/4K su GPU Radeon)
+   - Installa l'estensione: "enhanced-h264ify" (o Enhancer for YouTube)
+   - Spunta il blocco AV1 e forza il formato AVC / H.264
 
 2. FLAG ACCELERAZIONE HARDWARE (Chrome / Brave / Chromium):
    - Digita nella barra indirizzi: chrome://flags (o brave://flags)
@@ -186,6 +184,7 @@ cat << 'EOF'
      * Override software rendering list  (#ignore-gpu-blocklist) -> Enabled
      * GPU rasterization                 (#enable-gpu-rasterization) -> Enabled
      * Zero-copy rasterizer              (#enable-zero-copy) -> Enabled
+     * Preferred Ozone platform          (#ozone-platform-hint)      -> Wayland
 
 3. VERIFICA STATO ACCELERAZIONE HARDWARE:
    - Apri una scheda e digita: chrome://gpu (o brave://gpu)
