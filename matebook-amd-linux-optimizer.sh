@@ -13,6 +13,7 @@ fi
 
 REAL_USER=${SUDO_USER:-$USER}
 USER_HOME=$(eval echo "~$REAL_USER")
+USER_ID=$(id -u "$REAL_USER")
 
 echo "=== 1. OTTIMIZZAZIONI KERNEL, MEMORIA & WATCHDOG ==="
 tee /etc/sysctl.d/99-matebook-optimizations.conf << 'EOF'
@@ -82,7 +83,7 @@ After=basic.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'echo "$BATT_MIN $BATT_MAX" > /sys/devices/platform/huawei-wmi/charge_control_thresholds'
+ExecStart=/bin/sh -c 'echo "$BATT_MIN $BATT_MAX" > /sys/devices/platform/huawei-wmi/charge_control_thresholds 2>/dev/null || true'
 RemainAfterExit=yes
 
 [Install]
@@ -96,13 +97,20 @@ else
 fi
 
 echo "=== 6. CONFIGURAZIONE TRACKER / LOCALSEARCH ==="
-su - "$REAL_USER" -c "
-gsettings set org.freedesktop.Tracker3.Miner.Files index-recursive-directories \"['$USER_HOME']\"
-gsettings set org.freedesktop.Tracker3.Miner.Files ignored-directories \"['po', 'CVS', 'core-dumps', 'lost+found', '.cache', '.local', '.var', 'node_modules', 'target', 'build', 'dist', '.git', '.wine', '.steam']\"
-gsettings set org.freedesktop.Tracker3.Miner.Files throttle 10
-gsettings set org.freedesktop.Tracker3.Miner.Files index-on-battery false
-gsettings set org.freedesktop.Tracker3.Miner.Files index-on-battery-first-time false
-"
+sudo -u "$REAL_USER" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$USER_ID/bus" \
+    gsettings set org.freedesktop.Tracker3.Miner.Files index-recursive-directories "['$USER_HOME']"
+
+sudo -u "$REAL_USER" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$USER_ID/bus" \
+    gsettings set org.freedesktop.Tracker3.Miner.Files ignored-directories "['po', 'CVS', 'core-dumps', 'lost+found', '.cache', '.local', '.var', 'node_modules', 'target', 'build', 'dist', '.git', '.wine', '.steam']"
+
+sudo -u "$REAL_USER" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$USER_ID/bus" \
+    gsettings set org.freedesktop.Tracker3.Miner.Files throttle 10
+
+sudo -u "$REAL_USER" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$USER_ID/bus" \
+    gsettings set org.freedesktop.Tracker3.Miner.Files index-on-battery false
+
+sudo -u "$REAL_USER" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$USER_ID/bus" \
+    gsettings set org.freedesktop.Tracker3.Miner.Files index-on-battery-first-time false
 
 echo "=== 7. SCRIPT GESTIONE CPU BOOST / FREQUENZE ==="
 tee /usr/local/bin/auto-boost.sh << 'EOF'
@@ -112,7 +120,7 @@ apply_profile() {
     PROFILE=$(powerprofilesctl get 2>/dev/null || echo "balanced")
     
     if [ "$PROFILE" = "power-saver" ]; then
-        # Risparmio energetico: Boost OFF, Max 1.7GHz, Governor Schedutil (reattivo ed elimina i lag)
+        # Risparmio energetico: Boost OFF, Frequenza a 1.7GHz, Governor Schedutil
         echo 0 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
         for cpu in /sys/devices/system/cpu/cpu*/cpufreq; do
             echo 1700000 > "$cpu/scaling_max_freq" 2>/dev/null || true
@@ -129,7 +137,7 @@ apply_profile() {
     fi
 }
 
-# Attesa post-boot per sincronizzazione con GNOME e power-profiles-daemon
+# Attesa post-boot per sincronizzazione con GNOME
 (
     sleep 4
     apply_profile
@@ -137,7 +145,7 @@ apply_profile() {
 
 apply_profile
 
-# Ascolto continuo D-Bus per cambio profilo istantaneo
+# Ascolto continuo D-Bus
 gdbus monitor --system --dest net.hadess.PowerProfiles --object-path /net/hadess/PowerProfiles | while read -r line; do
     if echo "$line" | grep -qE "ActiveProfile|PropertiesChanged"; then
         sleep 0.1
